@@ -15,4 +15,4 @@
     CI = "false"
 
 [template.environment]
-    DAILY_API_KEY = "Replace with Daily API key"
+    DAILY_API_KEY = "e20e11c2e1fe20a5acead7a469e231aea2f5e3af0d714665af2fbcca70a3d540"
