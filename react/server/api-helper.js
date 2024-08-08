@@ -21,8 +21,8 @@ exports.apiHelper = async (method, endpoint, body = {}) => {
     });
     return response.data;
   } catch (error) {
-    console.log("Status: ", error.response.status);
-    console.log("Text: ", error.response.statusText);
+    console.log("Status: ", error.response);
+    console.log("Text: ", error.response);
     // need to throw again so error is caught
     // a possible improvement here is to pass the status code back so it can be returned to the user
     throw new Error(error);
