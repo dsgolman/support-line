@@ -33,7 +33,7 @@ export const CallProvider = ({ children }) => {
       // CHANGE THIS TO YOUR NETLIFY URL
       // EX: https://myapp.netlify.app/.netlify/functions/room
       `${
-        process.env.REACT_APP_NETLIFY_URL || "https://partyline.daily.co"
+        "https://idyllic-medovik-ab342c.netlify.app"
       }/.netlify/functions/room`,
       {
         method: "POST",
@@ -52,7 +52,7 @@ export const CallProvider = ({ children }) => {
       // CHANGE THIS TO YOUR NETLIFY URL
       // EX: https://myapp.netlify.app/.netlify/functions/token
       `${
-        process.env.REACT_APP_NETLIFY_URL || "https://partyline.daily.co"
+        "https://idyllic-medovik-ab342c.netlify.app"
       }/.netlify/functions/token`,
       {
         method: "POST",
