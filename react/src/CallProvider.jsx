@@ -7,6 +7,14 @@ import {
 } from "react";
 import Daily from "@daily-co/daily-js";
 import { LISTENER, MOD, SPEAKER } from "./App";
+import {
+  VoiceClient,
+  VoiceEvent,
+} from "realtime-ai";
+import {
+  useVoiceClient,
+  useVoiceClientEvent
+} from "realtime-ai-react";
 
 export const CallContext = createContext(null);
 
@@ -15,6 +23,7 @@ export const INCALL = "in-call";
 const MSG_MAKE_MODERATOR = "make-moderator";
 const MSG_MAKE_SPEAKER = "make-speaker";
 const MSG_MAKE_LISTENER = "make-listener";
+const MSG_BOT_READY = "bot-ready";
 const FORCE_EJECT = "force-eject";
 
 export const CallProvider = ({ children }) => {
@@ -24,137 +33,177 @@ export const CallProvider = ({ children }) => {
   const [room, setRoom] = useState(null);
   const [error, setError] = useState(null);
   const [roomExp, setRoomExp] = useState(null);
+  // const [isBotConnected, setIsBotConnected] = useState(false);
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
   const [updateParticipants, setUpdateParticipants] = useState(null);
+  const [isBotReady, setIsBotReady] = useState(false);
 
-  const createRoom = async (roomName) => {
-    if (roomName) return roomName;
-    const response = await fetch(
-      // CHANGE THIS TO YOUR NETLIFY URL
-      // EX: https://myapp.netlify.app/.netlify/functions/room
-      `${
-        "https://idyllic-medovik-ab342c.netlify.app"
-      }/.netlify/functions/room`,
-      {
-        method: "POST",
+  const voiceClient = useVoiceClient();
+
+  // voiceClient.on(VoiceEvent.BotReady, () => {
+  //   console.log("[EVENT] Bot is ready");
+  // });
+  // voiceClient.on(VoiceEvent.Connected, () => {
+  //   console.log("[EVENT] Voice client session has started");
+  // });
+  // voiceClient.on(VoiceEvent.Disconnected, () => {
+  //   console.log("[EVENT] Disconnected");
+  // });
+
+  // const createRoom = async (roomName) => {
+  //   if (roomName) return roomName;
+  //   const response = await fetch(
+  //     // CHANGE THIS TO YOUR NETLIFY URL
+  //     // EX: https://myapp.netlify.app/.netlify/functions/room
+  //     `${
+  //       "https://idyllic-medovik-ab342c.netlify.app"
+  //     }/.netlify/functions/room`,
+  //     {
+  //       method: "POST",
+  //     }
+  //   ).catch((err) => {
+  //     throw new Error(err);
+  //   });
+  //   const room = await response.json();
+  //   return room;
+  // };
+  // const createToken = async (roomName) => {
+  //   if (!roomName) {
+  //     setError("Eep! We could not create a token");
+  //   }
+  //   const response = await fetch(
+  //     // CHANGE THIS TO YOUR NETLIFY URL
+  //     // EX: https://myapp.netlify.app/.netlify/functions/token
+  //     `${
+  //       "https://idyllic-medovik-ab342c.netlify.app"
+  //     }/.netlify/functions/token`,
+  //     {
+  //       method: "POST",
+  //       body: JSON.stringify({ properties: { room_name: roomName } }),
+  //     }
+  //   ).catch((err) => {
+  //     throw new Error(err);
+  //   });
+  //   const result = await response.json();
+  //   return result;
+  // };
+
+  // let roomUrl = "https://supportaiv.daily.co/mental-health"
+
+  const checkBotStatus = async () => {
+    try {
+      const response = await fetch('http://localhost:7860/bot_status');
+      if (response.ok) {
+        const data = await response.json();
+        setIsBotReady(data.bot_ready);
+      } else {
+        console.error('Failed to fetch bot status');
       }
-    ).catch((err) => {
-      throw new Error(err);
-    });
-    const room = await response.json();
-    return room;
-  };
-  const createToken = async (roomName) => {
-    if (!roomName) {
-      setError("Eep! We could not create a token");
+    } catch (error) {
+      console.error('Error fetching bot status:', error);
     }
-    const response = await fetch(
-      // CHANGE THIS TO YOUR NETLIFY URL
-      // EX: https://myapp.netlify.app/.netlify/functions/token
-      `${
-        "https://idyllic-medovik-ab342c.netlify.app"
-      }/.netlify/functions/token`,
-      {
-        method: "POST",
-        body: JSON.stringify({ properties: { room_name: roomName } }),
+  }
+
+  
+  const createRoom =  useCallback(async () => {
+    await checkBotStatus();
+    if(!isBotReady) {
+      try {
+          voiceClient.enableMic(false);
+          await voiceClient.start();
+          
+          let daily = voiceClient._transport._daily;
+          setCallFrame(daily); // Set the callFrame here
+          const properties = daily.properties;
+          let roomInfo = properties; 
+          
+          return roomInfo;
+      } catch (err) {
+          setError(err);
       }
-    ).catch((err) => {
-      throw new Error(err);
-    });
-    const result = await response.json();
-    return result;
-  };
+    } else {
+      return room;
+    }
+  }, []);
 
   const joinRoom = useCallback(
-    async ({ userName, name, moderator }) => {
-      if (callFrame) {
-        callFrame.leave();
-      }
-
-      let roomInfo = { name };
-      /**
-       * The first person to join will need to create the room first
-       */
-      if (!name && !moderator) {
-        roomInfo = await createRoom();
-      }
-      setRoom(roomInfo);
-
-      /**
-       * When a moderator makes someone else a moderator,
-       * they first leave and then rejoin with a token.
-       * In that case, we create a token for the new mod here.
-       */
-      let newToken;
-      if (moderator) {
-        // create a token for new moderators
-        newToken = await createToken(name);
-      }
-
-      const call = Daily.createCallObject({
-        audioSource: true, // start with audio on to get mic permission from user at start
-        videoSource: false,
-        dailyConfig: {
-          experimentalChromeVideoMuteLightOff: true,
-        },
-      });
-
-      const options = {
-        // CHANGE THIS TO YOUR DAILY DOMAIN
-        // EX: https://myaccount.daily.co/${roomInfo?.name}
-        url: `${
-          process.env.REACT_APP_DAILY_DOMAIN || "https://devrel.daily.co"
-        }/${roomInfo?.name}`,
-        userName,
-      };
-      if (roomInfo?.token) {
-        options.token = roomInfo?.token;
-      }
-      if (newToken?.token) {
-        options.token = newToken.token;
-      }
-
-      function handleJoinedMeeting(evt) {
-        setUpdateParticipants(
-          `joined-${evt?.participant?.user_id}-${Date.now()}`
-        );
-        setView(INCALL);
-        console.log("[JOINED MEETING]", evt?.participant);
-      }
-
-      call.on("joined-meeting", handleJoinedMeeting);
-
-      await call
-        .join(options)
-        .then(() => {
-          setError(false);
-          setCallFrame(call);
-          /**
-           * Now mute, so everyone joining is muted by default.
-           *
-           * IMPROVEMENT: track a speaker's muted state so if they
-           * are rejoining as a moderator, they don't have to turn
-           * their mic back on.
-           */
-          call.setLocalAudio(false);
-        })
-        .catch((err) => {
-          if (err) {
-            setError(err);
-          }
+    async ({ userName, url }) => {
+        if (!callFrame) {
+            console.error("Call frame is not initialized.");
+            return;
+        }
+        
+        const call = Daily.createCallObject({
+          audioSource: true, // start with audio on to get mic permission from user at start
+          videoSource: false,
+          dailyConfig: {
+            experimentalChromeVideoMuteLightOff: true,
+          },
         });
-      /**
-       * IMPROVEMENT: Every room should have a moderator. We should
-       * prevent people from joining (or kick them out after joining)
-       * if a mod isn't present. Since these demo rooms only last ten
-       * minutes we're not currently checking this.
-       */
+        
+        const options = {
+            url,
+            userName,
+        };
 
-      return () => {
-        call.off("joined-meeting", handleJoinedMeeting);
-      };
+        function handleJoinedMeeting(evt) {
+            setUpdateParticipants(
+                `joined-${evt?.participant?.user_id}-${Date.now()}`
+            );
+            setView(INCALL);
+            console.log("[JOINED MEETING]", evt?.participant);
+        }
+
+        call.on("joined-meeting", handleJoinedMeeting);
+
+        try {
+            await call.join(options);
+            setError(false);
+            setCallFrame(call);
+            call.setLocalAudio(false);
+        } catch (err) {
+            setError(err);
+        }
+
+        return () => {
+            call.off("joined-meeting", handleJoinedMeeting);
+        };
     },
     [callFrame]
+  );
+
+  // voiceClient.on(VoiceEvent.BotReady, () => {
+  //   console.log("[EVENT] Bot is ready");
+  // });
+
+  // voiceClient.on(VoiceEvent.Connected, () => {
+  //   console.log("[EVENT] Voice client session has started");
+  // });
+
+  useVoiceClientEvent(
+    VoiceEvent.Connected,
+    useCallback(() => {
+      console.log(`[SESSION EXPIRY] ${voiceClient.transportExpiry}`);
+      setIsBotReady(true);
+      setView(INCALL);
+      // setCallFrame(voiceClient._transport._daily);
+      // setView(INCALL);
+    }, [])
+  );
+
+  useVoiceClientEvent(
+    VoiceEvent.ParticipantConnected,
+    useCallback((p) => {
+      console.log(p);
+      if (!p.local) { 
+        
+      } else {
+        console.log(p);
+        console.log("USERNAME BLANK", p);
+      }
+      setUpdateParticipants(`updated-${p.user_id}-${Date.now()}`);
+      console.log("[PARTICIPANT JOINED/UPDATED]", p);
+    }, [])
   );
 
   const handleParticipantJoinedOrUpdated = useCallback((evt) => {
@@ -348,49 +397,49 @@ export const CallProvider = ({ children }) => {
     if (!callFrame) return;
 
     const handleAppMessage = async (evt) => {
-      console.log("[APP MESSAGE]", evt);
-      try {
-        switch (evt?.data?.msg) {
-          case MSG_MAKE_MODERATOR:
-            console.log("[LEAVING]");
-            await callFrame.leave();
-            let userName = evt?.data?.userName;
-            if (userName?.includes("✋")) {
-              const split = userName.split("✋ ");
-              userName = split.length === 2 ? split[1] : split[0];
+        console.log("[APP MESSAGE]", evt);
+        try {
+            switch (evt?.data?.msg) {
+                case MSG_MAKE_MODERATOR:
+                    console.log("[LEAVING]");
+                    await callFrame.leave();
+                    let userName = evt?.data?.userName;
+                    if (userName?.includes("✋")) {
+                        const split = userName.split("✋ ");
+                        userName = split.length === 2 ? split[1] : split[0];
+                    }
+                    joinRoom({
+                        moderator: true,
+                        userName,
+                        name: room?.name,
+                    });
+                    break;
+                case MSG_BOT_READY: // New message type for bot readiness
+                    // setIsBotReady(true); // Set bot readiness here
+                    break;
+                case MSG_MAKE_SPEAKER:
+                    updateUsername(SPEAKER);
+                    break;
+                case MSG_MAKE_LISTENER:
+                    updateUsername(LISTENER);
+                    break;
+                case FORCE_EJECT:
+                    leaveCall();
+                    break;
+                default:
+                    break;
             }
-            joinRoom({
-              moderator: true,
-              userName,
-              name: room?.name,
-            });
-            break;
-          case MSG_MAKE_SPEAKER:
-            updateUsername(SPEAKER);
-            break;
-          case MSG_MAKE_LISTENER:
-            updateUsername(LISTENER);
-            break;
-          case FORCE_EJECT:
-            //seeya
-            leaveCall();
-            break;
-          default:
-            break;
+        } catch (e) {
+            console.error(e);
         }
-      } catch (e) {
-        console.error(e);
-      }
     };
 
     const showError = (e) => {
-      console.log("[ERROR]");
-      console.warn(e);
+        console.log("[ERROR]");
+        console.warn(e);
     };
 
-    console.log(callFrame?.meetingState());
     callFrame.on("error", showError);
-    callFrame.on("participant-joined", handleParticipantJoinedOrUpdated);
     callFrame.on("participant-updated", handleParticipantJoinedOrUpdated);
     callFrame.on("participant-left", handleParticipantLeft);
     callFrame.on("app-message", handleAppMessage);
@@ -399,18 +448,18 @@ export const CallProvider = ({ children }) => {
     callFrame.on("track-stopped", destroyTrack);
 
     return () => {
-      // clean up
-      callFrame.off("error", showError);
-      callFrame.off("participant-joined", handleParticipantJoinedOrUpdated);
-      callFrame.off("participant-updated", handleParticipantJoinedOrUpdated);
-      callFrame.off("participant-left", handleParticipantLeft);
-      callFrame.off("app-message", handleAppMessage);
-      callFrame.off("active-speaker-change", handleActiveSpeakerChange);
-      callFrame.off("track-started", playTrack);
-      callFrame.off("track-stopped", destroyTrack);
+        callFrame.off("error", showError);
+        callFrame.off("participant-joined", handleParticipantJoinedOrUpdated);
+        callFrame.off("participant-updated", handleParticipantJoinedOrUpdated);
+        callFrame.off("participant-left", handleParticipantLeft);
+        callFrame.off("app-message", handleAppMessage);
+        callFrame.off("active-speaker-change", handleActiveSpeakerChange);
+        callFrame.off("track-started", playTrack);
+        callFrame.off("track-stopped", destroyTrack);
     };
   }, [
     callFrame,
+    createRoom,
     joinRoom,
     leaveCall,
     room?.name,
@@ -421,6 +470,7 @@ export const CallProvider = ({ children }) => {
     playTrack,
     destroyTrack,
   ]);
+
 
   /**
    * Update participants for any event that happens
@@ -439,8 +489,9 @@ export const CallProvider = ({ children }) => {
   useEffect(() => {
     if (!callFrame) return;
     async function getRoom() {
-      console.log("[GETTING ROOM DETAILS]");
+      
       const room = await callFrame?.room();
+      console.log("[GETTING ROOM DETAILS]", room);
       const exp = room?.config?.exp;
       setRoom(room);
       if (exp) {
@@ -459,6 +510,7 @@ export const CallProvider = ({ children }) => {
         handleUnmute,
         displayName,
         joinRoom,
+        createRoom,
         leaveCall,
         endCall,
         removeFromCall,
@@ -468,6 +520,7 @@ export const CallProvider = ({ children }) => {
         error,
         participants,
         room,
+        isBotReady,
         roomExp,
         view,
       }}

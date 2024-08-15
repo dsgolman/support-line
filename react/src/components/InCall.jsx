@@ -23,7 +23,6 @@ const InCall = () => {
     lowerHand,
     endCall,
   } = useCallState();
-  console.log(participants);
 
   const local = useMemo(
     (p) => participants?.filter((p) => p?.local)[0],

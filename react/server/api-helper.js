@@ -28,3 +28,11 @@ exports.apiHelper = async (method, endpoint, body = {}) => {
     throw new Error(error);
   }
 };
+
+
+// curl --request POST \
+//      --url https://api.daily.co/v1/ \
+//      --header 'Accept: application/json' \
+//      --header 'Authorization: Bearer e20e11c2e1fe20a5acead7a469e231aea2f5e3af0d714665af2fbcca70a3d540' \
+//      --header 'Content-Type: application/json' \
+//      --data '{"properties": { "enable_transcription": "deepgram:6daa6d673d9f5e2e93f1f83ea0e94babaf9706e9" }}'
