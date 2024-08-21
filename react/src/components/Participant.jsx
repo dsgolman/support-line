@@ -104,7 +104,7 @@ const Participant = ({ participant, local, modCount }) => {
             {
               text: "Remove from call",
               action: () => removeFromCall(participant),
-              warning: true,
+              warning: "true",
             },
           ];
           options = [...options, ...o];
@@ -133,7 +133,7 @@ const Participant = ({ participant, local, modCount }) => {
             {
               text: "Remove from call",
               action: () => removeFromCall(participant),
-              warning: true,
+              warning: "true",
             },
           ];
           options = [...options, ...o];
@@ -154,7 +154,7 @@ const Participant = ({ participant, local, modCount }) => {
       options.push({
         text: lastMod ? "End call" : "Leave call",
         action: () => (lastMod ? endCall() : leaveCall(participant)),
-        warning: true,
+        warning: "true",
       });
     }
 
@@ -195,7 +195,7 @@ const Participant = ({ participant, local, modCount }) => {
       let playTimeout;
       const handleCanPlay = () => {
         playTimeout = setTimeout(() => {
-          showPlayAudioPrompt(true);
+          showPlayAudioPrompt("true");
         }, 1500);
       };
       const handlePlay = () => {
@@ -214,7 +214,7 @@ const Participant = ({ participant, local, modCount }) => {
     // To fix that, we call `play` on each audio track on all devicechange events.
 
     if (!audioRef.current) {
-      return false;
+      return;
     }
 
     const startPlayingTrack = () => {

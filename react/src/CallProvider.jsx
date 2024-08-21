@@ -10,6 +10,9 @@ import { LISTENER, MOD, SPEAKER } from "./App";
 import {
   VoiceClient,
   VoiceEvent,
+  StartBotError,
+  VoiceError,
+  ConnectionTimeoutError
 } from "realtime-ai";
 import {
   useVoiceClient,
@@ -20,6 +23,8 @@ export const CallContext = createContext(null);
 
 export const PREJOIN = "pre-join";
 export const INCALL = "in-call";
+export const LANDING = "home"
+export const DIRECTCALL = "direct-call"
 const MSG_MAKE_MODERATOR = "make-moderator";
 const MSG_MAKE_SPEAKER = "make-speaker";
 const MSG_MAKE_LISTENER = "make-listener";
@@ -27,7 +32,7 @@ const MSG_BOT_READY = "bot-ready";
 const FORCE_EJECT = "force-eject";
 
 export const CallProvider = ({ children }) => {
-  const [view, setView] = useState(PREJOIN); // pre-join | in-call
+  const [view, setView] = useState(LANDING); // pre-join | in-call
   const [callFrame, setCallFrame] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [room, setRoom] = useState(null);
@@ -90,84 +95,80 @@ export const CallProvider = ({ children }) => {
 
   // let roomUrl = "https://supportaiv.daily.co/mental-health"
 
-  const checkBotStatus = async () => {
+
+  const createRoom = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:7860/bot_status');
-      if (response.ok) {
-        const data = await response.json();
-        setIsBotReady(data.bot_ready);
-      } else {
-        console.error('Failed to fetch bot status');
+      // Clear the existing call, room, and participants if they exist
+      if (voiceClient._transport._daily) {
+        await voiceClient._transport._daily.leave();
+        await voiceClient.disconnect();
       }
-    } catch (error) {
-      console.error('Error fetching bot status:', error);
+
+      let daily = await start();
+      console(daily);
+      setCallFrame(daily);
+      return daily;
+    } catch (err) {
+      console.log(err);
+      setError(err);
+    }
+  }, [voiceClient._transport._daily]);
+
+  async function start() {
+    try {
+      await voiceClient.start();
+      return voiceClient._transport._daily;
+    } catch (e) {
+      if (e instanceof StartBotError) {
+        console.log(e.status, e.message);
+        setError(e.message);
+      } else if (e instanceof ConnectionTimeoutError) {
+        setError(e.message);
+      } else {
+        setError(e.message || "Unknown error occurred");
+      }
     }
   }
 
-  
-  const createRoom =  useCallback(async () => {
-    await checkBotStatus();
-    if(!isBotReady) {
-      try {
-          voiceClient.enableMic(false);
-          await voiceClient.start();
-          
-          let daily = voiceClient._transport._daily;
-          setCallFrame(daily); // Set the callFrame here
-          const properties = daily.properties;
-          let roomInfo = properties; 
-          
-          return roomInfo;
-      } catch (err) {
-          setError(err);
-      }
-    } else {
-      return room;
-    }
-  }, []);
 
   const joinRoom = useCallback(
     async ({ userName, url }) => {
-        if (!callFrame) {
-            console.error("Call frame is not initialized.");
-            return;
-        }
-        
-        const call = Daily.createCallObject({
-          audioSource: true, // start with audio on to get mic permission from user at start
-          videoSource: false,
-          dailyConfig: {
-            experimentalChromeVideoMuteLightOff: true,
-          },
-        });
-        
-        const options = {
-            url,
-            userName,
-        };
+      console.log(voiceClient._transport._daily);
+      const call = voiceClient._transport._daily;
+      // const call = Daily.createCallObject({
+      //   audioSource: true, // start with audio on to get mic permission from user at start
+      //   videoSource: false,
+      //   dailyConfig: {
+      //     experimentalChromeVideoMuteLightOff: true,
+      //   },
+      // });
+      
+      const options = {
+          url,
+          userName,
+      };
 
-        function handleJoinedMeeting(evt) {
-            setUpdateParticipants(
-                `joined-${evt?.participant?.user_id}-${Date.now()}`
-            );
-            setView(INCALL);
-            console.log("[JOINED MEETING]", evt?.participant);
-        }
+      function handleJoinedMeeting(evt) {
+          setUpdateParticipants(
+              `joined-${evt?.participant?.user_id}-${Date.now()}`
+          );
+          setView(INCALL);
+          console.log("[JOINED MEETING]", evt?.participant);
+      }
 
-        call.on("joined-meeting", handleJoinedMeeting);
+      call.on("joined-meeting", handleJoinedMeeting);
 
-        try {
-            await call.join(options);
-            setError(false);
-            setCallFrame(call);
-            call.setLocalAudio(false);
-        } catch (err) {
-            setError(err);
-        }
+      try {
+          await call.join(options);
+          setError(false);
+          call.setLocalAudio(false);
+      } catch (err) {
+          setError(err);
+      }
 
-        return () => {
-            call.off("joined-meeting", handleJoinedMeeting);
-        };
+      return () => {
+          call.off("joined-meeting", handleJoinedMeeting);
+      };
     },
     [callFrame]
   );
@@ -184,25 +185,27 @@ export const CallProvider = ({ children }) => {
     VoiceEvent.Connected,
     useCallback(() => {
       console.log(`[SESSION EXPIRY] ${voiceClient.transportExpiry}`);
-      setIsBotReady(true);
-      setView(INCALL);
-      // setCallFrame(voiceClient._transport._daily);
-      // setView(INCALL);
     }, [])
   );
 
   useVoiceClientEvent(
+    VoiceEvent.BotReady,
+    useCallback(() => {
+      console.log("bot ready");
+    }, [])
+  );
+
+  useVoiceClientEvent(
+    VoiceEvent.BotConnected,
+    useCallback((p) => {
+      if (!p.local) return;
+    }, [])
+  );
+
+   useVoiceClientEvent(
     VoiceEvent.ParticipantConnected,
     useCallback((p) => {
-      console.log(p);
-      if (!p.local) { 
-        
-      } else {
-        console.log(p);
-        console.log("USERNAME BLANK", p);
-      }
-      setUpdateParticipants(`updated-${p.user_id}-${Date.now()}`);
-      console.log("[PARTICIPANT JOINED/UPDATED]", p);
+      if (!p.local) setCallFrame(voiceClient._transport._daily)
     }, [])
   );
 
@@ -415,7 +418,7 @@ export const CallProvider = ({ children }) => {
                     });
                     break;
                 case MSG_BOT_READY: // New message type for bot readiness
-                    // setIsBotReady(true); // Set bot readiness here
+                    console.log(evt?.data)
                     break;
                 case MSG_MAKE_SPEAKER:
                     updateUsername(SPEAKER);
@@ -440,6 +443,7 @@ export const CallProvider = ({ children }) => {
     };
 
     callFrame.on("error", showError);
+    callFrame.on("participant-joined", handleParticipantJoinedOrUpdated)
     callFrame.on("participant-updated", handleParticipantJoinedOrUpdated);
     callFrame.on("participant-left", handleParticipantLeft);
     callFrame.on("app-message", handleAppMessage);
@@ -461,6 +465,7 @@ export const CallProvider = ({ children }) => {
     callFrame,
     createRoom,
     joinRoom,
+    isBotReady,
     leaveCall,
     room?.name,
     updateUsername,
@@ -480,8 +485,13 @@ export const CallProvider = ({ children }) => {
    */
   useEffect(() => {
     if (updateParticipants) {
-      console.log("[UPDATING PARTICIPANT LIST]");
+      console.log("[UPDATING PARTICIPANT LIST]", callFrame?.participants());
       const list = Object.values(callFrame?.participants() || {});
+      // console.log(list)
+      // console.log(list[0])
+      // if(list[0].user_name === "") {
+      //   callFrame.setUserName("_MOD");
+      // }
       setParticipants(list);
     }
   }, [updateParticipants, callFrame]);
@@ -492,11 +502,14 @@ export const CallProvider = ({ children }) => {
       
       const room = await callFrame?.room();
       console.log("[GETTING ROOM DETAILS]", room);
+
       const exp = room?.config?.exp;
       setRoom(room);
       if (exp) {
         setRoomExp(exp * 1000 || Date.now() + 1 * 60 * 1000);
       }
+      if(view !== DIRECTCALL)
+        setView(INCALL);
     }
     getRoom();
   }, [callFrame]);
@@ -523,6 +536,7 @@ export const CallProvider = ({ children }) => {
         isBotReady,
         roomExp,
         view,
+        setView
       }}
     >
       {children}

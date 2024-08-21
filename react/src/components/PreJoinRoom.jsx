@@ -15,22 +15,46 @@ const PreJoinRoom = () => {
   const [roomUrl, setRoomUrl] = useState('');
   const [roomCreated, setRoomCreated] = useState(false);
 
+  const checkBotStatus = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:7860', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          skip_config: true
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return data; // Return the bot status directly
+      } else {
+        console.error('Failed to fetch bot status');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error fetching bot status:', error);
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     const setupRoom = async () => {
-      if (!isBotReady) {
-        try {
+      try {
+        const status = await checkBotStatus();
+        if(status.bot_ready) {
+          setRoomUrl(status.url);
+        } else {
           const roomInfo = await createRoom();
-          setRoomUrl(roomInfo.url);
           setRoomCreated(true);
-        } catch (err) {
-          console.error('Error creating room:', err);
         }
+      } catch (err) {
+        console.error('Error creating room:', err);
       }
     };
-
     setupRoom();
-  }, [isBotReady]);
+  }, [checkBotStatus, createRoom]);
 
   const handleRoomChange = (e) => {
     setRoomName(e?.target?.value);
@@ -74,61 +98,72 @@ const PreJoinRoom = () => {
 
   return (
     <Container>
-      <Title>Getting started</Title>
-      {!isBotReady ? (
-        <p>Please wait, setting up the room...</p>
-      ) : (
-        <Form onSubmit={submitForm}>
-          <Label htmlFor="fname">First name</Label>
-          <Input ref={firstNameRef} type="text" id="fname" name="fname" required />
-          <Label htmlFor="lname">Last name</Label>
-          <Input ref={lastNameRef} type="text" id="lname" name="lname" />
-          <Label htmlFor="room">Join code</Label>
-          <Input ref={roomNameRef} type="text" id="room" name="room" onChange={handleRoomChange} />
-          <SmallText>
-            Enter code to join an existing room, or leave empty to create a new room.
-          </SmallText>
-          <Submit
-            type="submit"
-            value={submitting ? 'Joining...' : roomName?.trim() ? 'Join room' : 'Create and join room'}
-          />
-          {error && <ErrorText>Error: {error.toString()}</ErrorText>}
-        </Form>
-      )}
+      <InnerContainer>
+        <Title>Getting started</Title>
+        {!roomUrl ? (
+          <p>Please wait, setting up the room...</p>
+        ) : (
+          <Form onSubmit={submitForm}>
+            <Label htmlFor="fname">First name</Label>
+            <Input ref={firstNameRef} type="text" id="fname" name="fname" required />
+            <Label htmlFor="lname">Last name</Label>
+            <Input ref={lastNameRef} type="text" id="lname" name="lname" />
+            <Label htmlFor="room">Join code</Label>
+            <Input ref={roomNameRef} type="text" id="room" name="room" onChange={handleRoomChange} />
+            <SmallText>
+              Enter code to join an existing room, or leave empty to create a new room.
+            </SmallText>
+            <Submit
+              type="submit"
+              value={submitting ? 'Joining...' : roomName?.trim() ? 'Join room' : 'Create and join room'}
+            />
+            {error && <ErrorText>Error: {error.toString()}</ErrorText>}
+          </Form>
+        )}
+      </InnerContainer>
     </Container>
   );
 };
 
 const Container = styled.div`
   display: flex;
-  align-items: flex-start;
-  flex-direction: column;
   justify-content: center;
-  height: 100%;
-  max-width: 400px;
-  margin-top: 48px;
+  align-items: center;
+  height: 100vh;
+  padding: 20px;
+  background-color: ${theme.colors.white};
+`;
 
-  @media only screen and (min-width: 768px) {
-    justify-content: flex-start;
-    margin-top: 32px;
-  }
+const InnerContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 450px;
+  width: 100%;
+  background-color: ${theme.colors.greyLight};
+  padding: 40px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 `;
 
 const Title = styled.h1`
   font-size: ${theme.fontSize.large};
   color: ${theme.colors.blueDark};
+  margin-bottom: 24px;
+  text-align: center;
 `;
 
 const Form = styled.form`
   display: flex;
   flex-direction: column;
-  margin: 0 0 24px;
+  width: 100%;
 `;
 
 const SmallText = styled.p`
   font-size: ${theme.fontSize.base};
   color: ${theme.colors.greyDark};
-  margin: 2px 0;
+  margin: 8px 0;
+  text-align: center;
 `;
 
 const Label = styled.label`
@@ -143,31 +178,39 @@ const Label = styled.label`
 const Input = styled.input`
   border-radius: 8px;
   border: ${theme.colors.grey} 1px solid;
-  padding: 4px;
+  padding: 12px;
   font-size: 16px;
   line-height: 24px;
-  margin-bottom: 4px;
+  margin-bottom: 16px;
+  width: 100%;
 
   &:focus {
-    outline: ${theme.colors.grey} auto 1px;
+    outline: none;
+    border-color: ${theme.colors.cyan};
+    box-shadow: 0 0 0 2px ${theme.colors.cyanLight};
   }
 `;
 
-const Submit = styled(Input)`
+const Submit = styled.input`
   margin-top: 16px;
-  border: ${theme.colors.cyanLight} 2px solid;
+  border: none;
   background-color: ${theme.colors.turquoise};
-  padding: 5px;
+  padding: 12px;
   font-size: ${theme.fontSize.base};
   font-weight: 600;
-  height: 36px;
+  height: 48px;
   cursor: pointer;
+  color: ${theme.colors.white};
+  border-radius: 8px;
+  width: 100%;
+  text-align: center;
 
   &:active {
     background-color: ${theme.colors.cyan};
   }
+
   &:hover {
-    border: ${theme.colors.cyan} solid 2px;
+    background-color: ${theme.colors.cyanLight};
   }
 `;
 
