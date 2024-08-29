@@ -96,29 +96,59 @@ export const CallProvider = ({ children }) => {
   // let roomUrl = "https://supportaiv.daily.co/mental-health"
 
 
-  const createRoom = useCallback(async () => {
+  const createRoom = useCallback(async (userName, url) => {
     try {
+      console.log("Creating room...");
+
       // Clear the existing call, room, and participants if they exist
-      if (voiceClient._transport._daily) {
-        await voiceClient._transport._daily.leave();
-        await voiceClient.disconnect();
+      // Uncomment and adjust as needed
+      // if (voiceClient._transport._daily) {
+      //   console.log("Existing session found, disconnecting...");
+      //   await voiceClient._transport._daily.leave();
+      //   await voiceClient.disconnect();
+      // }
+
+      // Start the voice client and get the Daily transport
+      let daily = await start();
+      if (!daily) {
+        throw new Error("Failed to retrieve Daily transport after start");
       }
 
-      let daily = await start();
-      console(daily);
-      setCallFrame(daily);
-      return daily;
+      console.log("Daily transport obtained:", daily);
+
+      // Further operations involving the daily transport, if any
+      // ...
+
+      return daily; // Ensure the function returns
+
     } catch (err) {
-      console.log(err);
+      console.error("Error in createRoom:", err);
       setError(err);
     }
-  }, [voiceClient._transport._daily]);
+  }, [voiceClient]);
 
   async function start() {
     try {
-      await voiceClient.start();
+      console.log("Starting voice client...");
+
+      const startPromise = voiceClient.start();
+
+      // Adding multiple checkpoints to log the process
+      startPromise.then(() => console.log("Voice client start promise resolved"));
+
+      const result = await Promise.all([startPromise]);
+
+      console.log("Voice client started.");
+
+      // Verify that the daily transport is set
+      if (!voiceClient._transport || !voiceClient._transport._daily) {
+        throw new Error("Daily transport is not set after voice client start");
+      }
+
+      console.log("Daily transport confirmed.");
       return voiceClient._transport._daily;
     } catch (e) {
+      console.error("Error in start:", e);
       if (e instanceof StartBotError) {
         console.log(e.status, e.message);
         setError(e.message);
@@ -127,14 +157,16 @@ export const CallProvider = ({ children }) => {
       } else {
         setError(e.message || "Unknown error occurred");
       }
+      return null; // Return null in case of an error to prevent hanging
     }
   }
 
 
   const joinRoom = useCallback(
     async ({ userName, url }) => {
-      console.log(voiceClient._transport._daily);
-      const call = voiceClient._transport._daily;
+      console.log(callFrame);
+      const call = callFrame;
+      // const call = voiceClient._transport._daily;
       // const call = Daily.createCallObject({
       //   audioSource: true, // start with audio on to get mic permission from user at start
       //   videoSource: false,
@@ -180,6 +212,14 @@ export const CallProvider = ({ children }) => {
   // voiceClient.on(VoiceEvent.Connected, () => {
   //   console.log("[EVENT] Voice client session has started");
   // });
+
+  // Configure event listeners
+  voiceClient.on(VoiceEvent.TransportStateChanged, (state) => {
+    console.log("[EVENT] Transport state change:", state);
+    if(state === "connected") {
+      setView(INCALL);
+    }
+  });
 
   useVoiceClientEvent(
     VoiceEvent.Connected,
@@ -508,8 +548,8 @@ export const CallProvider = ({ children }) => {
       if (exp) {
         setRoomExp(exp * 1000 || Date.now() + 1 * 60 * 1000);
       }
-      if(view !== DIRECTCALL)
-        setView(INCALL);
+      // if(view !== DIRECTCALL)
+      //   setView(INCALL);
     }
     getRoom();
   }, [callFrame]);

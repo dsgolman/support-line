@@ -14,17 +14,6 @@ export const MOD = "MOD";
 export const SPEAKER = "SPK";
 export const LISTENER = "LST";
 
-// Configure event listeners
-dailyVoiceClient.on(VoiceEvent.TransportStateChanged, (state) => {
-  console.log("[EVENT] Transport state change:", state);
-});
-dailyVoiceClient.on(VoiceEvent.BotReady, () => {
-  console.log("[EVENT] Bot is ready");
-});
-dailyVoiceClient.on(VoiceEvent.Disconnected, () => {
-  console.log("[EVENT] User disconnected");
-});
-
 const AppContent = () => {
   const { view } = useCallState();
 

@@ -3,7 +3,7 @@ import { VoiceMessage } from "realtime-ai";
 
 // Create a single instance of DailyVoiceClient
 const dailyVoiceClient = new DailyVoiceClient({
-  baseUrl: "http://localhost:7860",
+  baseUrl: "https://flyio-example-summer-sound-5998.fly.dev/start_bot",
   enableMic: true,
   config: {
     llm: {

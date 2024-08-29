@@ -15,16 +15,13 @@ const PreJoinRoom = () => {
   const [roomUrl, setRoomUrl] = useState('');
   const [roomCreated, setRoomCreated] = useState(false);
 
-  const checkBotStatus = useCallback(async () => {
+  const checkBotStatus = useCallback(async (roomUrl) => {
     try {
-      const response = await fetch('http://localhost:7860', {
-        method: 'POST',
+      const response = await fetch(`https://flyio-example-summer-sound-5998.fly.dev/status?room_url=${roomUrl}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          skip_config: true
-        }),
+        }
       });
       if (response.ok) {
         const data = await response.json();
@@ -39,22 +36,32 @@ const PreJoinRoom = () => {
     }
   }, []);
 
-  useEffect(() => {
-    const setupRoom = async () => {
-      try {
-        const status = await checkBotStatus();
-        if(status.bot_ready) {
-          setRoomUrl(status.url);
-        } else {
-          const roomInfo = await createRoom();
-          setRoomCreated(true);
-        }
-      } catch (err) {
-        console.error('Error creating room:', err);
+  const setupRoom = async (userName, roomUrl) => {
+    try {
+      let {room_url, status} = await checkBotStatus(roomUrl);
+      if(status === "not_ready") {
+        let result = await createRoom(userName, room_url);
+        console.log(result);
+      } else {
+
+        try {
+            await joinRoom({ userName, room_url });
+          } catch (err) {
+            console.error('Error joining room:', err);
+          } finally {
+            setSubmitting(false);
+          }
       }
-    };
-    setupRoom();
-  }, [checkBotStatus, createRoom]);
+
+    } catch (err) {
+      console.error('Error creating room:', err);
+    }
+  };
+
+  // useEffect(() => {
+    
+  //   setupRoom();
+  // }, [checkBotStatus, createRoom]);
 
   const handleRoomChange = (e) => {
     setRoomName(e?.target?.value);
@@ -76,22 +83,17 @@ const PreJoinRoom = () => {
         url = `https://supportaiv.daily.co/${roomNameRef?.current?.value?.trim()}`;
         userName = `${userName?.trim()}_${LISTENER}`;
       } else {
-        if (!isBotReady) {
-          url = roomUrl || ''; // Use the URL from the state
-          userName = `${userName?.trim()}_${MOD}`;
-        } else {
-          url = `https://supportaiv.daily.co/default-room`;
-          userName = `${userName?.trim()}_${LISTENER}`;
-        }
+        // if (!isBotReady) {
+        //   url = roomUrl || ''; // Use the URL from the state
+        //   userName = `${userName?.trim()}_${MOD}`;
+        // } else {
+        //   url = `https://supportaiv.daily.co/default-room`;
+        //   userName = `${userName?.trim()}_${LISTENER}`;
+        // }
       }
 
-      try {
-        await joinRoom({ userName, url });
-      } catch (err) {
-        console.error('Error joining room:', err);
-      } finally {
-        setSubmitting(false);
-      }
+      await setupRoom(userName, url);
+
     },
     [firstNameRef, lastNameRef, roomNameRef, joinRoom, submitting, isBotReady, roomUrl]
   );
@@ -100,7 +102,7 @@ const PreJoinRoom = () => {
     <Container>
       <InnerContainer>
         <Title>Getting started</Title>
-        {!roomUrl ? (
+        {roomUrl ? (
           <p>Please wait, setting up the room...</p>
         ) : (
           <Form onSubmit={submitForm}>
